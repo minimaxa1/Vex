@@ -149,7 +149,7 @@ Each export produces a `.vmig.meta.json` alongside the data file:
 ## Science
 
 Mixed-model migration in v0.2+ is based on:
-- [vec2vec (Jha et al., Cornell 2025)](https://arxiv.org/abs/2501.09409) — cross-model vector translation
+- [vec2vec (Jha et al., Cornell 2025)](https://arxiv.org/abs/arXiv:2505.12540) cross-model vector translation
 - Drift-Adapter — lightweight adapter for embedding space alignment
 
 ## Contributing
