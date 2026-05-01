@@ -1,0 +1,30 @@
+{
+  "name": "vex",
+  "version": "0.0.1",
+  "description": "Cross-standard vector DB migration tool — .vmig.jsonl interchange format for agent memory.",
+  "type": "module",
+  "bin": {
+    "vex": "./vex.mjs"
+  },
+  "main": "./vex.mjs",
+  "license": "Apache-2.0",
+  "keywords": [
+    "vector",
+    "database",
+    "migration",
+    "embeddings",
+    "pinecone",
+    "qdrant",
+    "vektor",
+    "agent-memory"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vektormemory/vex"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
