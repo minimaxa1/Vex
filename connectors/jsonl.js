@@ -1,18 +1,18 @@
-import { readJsonl, writeJsonl, toRecord } from '../formats/vmig.js';
+import { readJsonl, writeJsonl } from '../formats/vmig.js';
 
 export const jsonlConnector = {
   name: 'jsonl',
 
   async extract(opts) {
-    const records = await readJsonl(opts.file);
-    console.log(`[jsonl] read ${records.length} records from ${opts.file}`);
-    return records;
+    const file = opts['file'] || opts['from'] || opts['input'];
+    if (!file) throw new Error('[jsonl] --file or --from required');
+    return await readJsonl(file);
   },
 
   async load(records, opts) {
-    const out = opts.output ?? `export-${Date.now()}.vmig.jsonl`;
-    writeJsonl(records, out);
-    console.log(`[jsonl] wrote ${records.length} records → ${out}`);
-    return out;
-  }
+    const file = opts['output'] || opts['to'];
+    if (!file) throw new Error('[jsonl] --output required');
+    writeJsonl(records, file);
+    console.log(`[jsonl] wrote ${records.length} records → ${file}`);
+  },
 };

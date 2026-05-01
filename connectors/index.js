@@ -1,17 +1,17 @@
-﻿import { jsonlConnector }    from './jsonl.js';
 import { vektorConnector }   from './vektor.js';
+import { jsonlConnector }    from './jsonl.js';
 import { pineconeConnector } from './pinecone.js';
 import { qdrantConnector }   from './qdrant.js';
 
-const registry = {
-  jsonl:    jsonlConnector,
+const CONNECTORS = {
   vektor:   vektorConnector,
+  jsonl:    jsonlConnector,
   pinecone: pineconeConnector,
   qdrant:   qdrantConnector,
 };
 
 export function getConnector(name) {
-  const c = registry[name];
-  if (!c) throw new Error(`Unknown connector: ${name}. Available: ${Object.keys(registry).join(', ')}`);
+  const c = CONNECTORS[name?.toLowerCase()];
+  if (!c) throw new Error(`Unknown connector: "${name}". Available: ${Object.keys(CONNECTORS).join(', ')}`);
   return c;
 }

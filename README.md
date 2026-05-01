@@ -1,4 +1,4 @@
-# Vex — Vector Exchange
+# vex — Vector Exchange
 
 > Cross-standard vector DB migration tool. Export, import, and migrate agent memory between vector stores using the open `.vmig.jsonl` interchange format.
 
@@ -149,7 +149,7 @@ Each export produces a `.vmig.meta.json` alongside the data file:
 ## Science
 
 Mixed-model migration in v0.2+ is based on:
-- [vec2vec (Jha et al., Cornell 2025)](https://arxiv.org/abs/arXiv:2505.12540) cross-model vector translation
+- [vec2vec (Jha et al., Cornell 2025)](https://arxiv.org/abs/2501.09409) — cross-model vector translation
 - Drift-Adapter — lightweight adapter for embedding space alignment
 
 ## Contributing
@@ -160,7 +160,7 @@ See `connectors/qdrant.js` as the reference implementation.
 
 ## License
 
-Apache 2.0 — free to use, fork, clone, build on or turn into a nft and get rich! 
+Apache 2.0 — free to use, fork, and build on.
 
 ---
 
