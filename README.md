@@ -160,7 +160,7 @@ See `connectors/qdrant.js` as the reference implementation.
 
 ## License
 
-Apache 2.0 — free to use, fork, and build on.
+Apache 2.0 — free to use, fork, clone, build on or turn into a nft and get rich! 
 
 ---
 
