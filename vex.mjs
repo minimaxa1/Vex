@@ -54,7 +54,7 @@ function banner() {
   console.log(Co('   ╚████╔╝ ') + St('███████╗') + Sk('██╔╝ ██╗') + '  ' + Gr(`v${VERSION}`));
   console.log(Co('    ╚═══╝  ') + St('╚══════╝') + Sk('╚═╝  ╚═╝'));
   console.log('');
-  console.log('  ' + W('Vector Exchange') + Gr('  ·  Apache 2.0  ·  github.com/minimaxa1/Vex'));
+  console.log('  ' + W('Vector Exchange') + Gr('  ·  Apache 2.0  ·  github.com/Vektor-Memory/Vex'));
   console.log('');
 }
 
