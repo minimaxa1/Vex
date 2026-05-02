@@ -30,9 +30,14 @@ Every vector DB has a different API, a different format, and zero interop. Movin
 ## Install
 
 ```bash
-npm install -g vex
-# or run without installing
-npx vex --help
+# Global install
+npm install -g @vektormemory/vex
+
+# Or run without installing
+npx @vektormemory/vex --help
+```
+
+**Requirements:** Node.js >= 18 (native fetch required). No extra dependencies for Pinecone or Qdrant — connectors use the built-in fetch API.
 ```
 
 **Requirements:** Node.js >= 18 (native fetch required). No extra dependencies for Pinecone or Qdrant — connectors use the built-in fetch API.
