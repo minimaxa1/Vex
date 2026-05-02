@@ -148,4 +148,62 @@ export const chromaConnector = {
 
     summary({ connector:'chroma', total:records.length, upserted, skipped, durationMs:Date.now()-t0 });
   },
+async extractStream(opts, onPage) {
+    const url        = opts['url']        || process.env.CHROMA_URL        || 'http://localhost:8000';
+    const collection = opts['collection'] || process.env.CHROMA_COLLECTION;
+    const tenant     = opts['tenant']     || 'default_tenant';
+    const database   = opts['database']   || 'default_database';
+    const namespace  = opts['namespace']  || null;
+    const limit      = opts['limit'] ? parseInt(opts['limit']) : null;
+
+    if (!collection) throw new Error('[chroma] --collection required');
+
+    const base   = `${url}/api/v1/collections`;
+    const colRes = await fetch(`${base}/${collection}?tenant=${tenant}&database=${database}`);
+    if (!colRes.ok) throw new Error(`[chroma] collection not found: ${collection}`);
+    const colData = await colRes.json();
+    const colId   = colData.id;
+    const colCount = colData.count ?? '?';
+    console.log(`[chroma] stream export — "${collection}" (${colCount} items)`);
+
+    const pageSize = 100;
+    let offset = 0;
+    let sent   = 0;
+
+    while (true) {
+      const body = { limit: pageSize, offset, include: ['embeddings', 'documents', 'metadatas'] };
+      if (namespace) body.where = { namespace: { '$eq': namespace } };
+
+      const res  = await fetch(`${base}/${colId}/get`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!res.ok) throw new Error(`[chroma] get failed: ${await res.text()}`);
+      const data = await res.json();
+      const ids  = data.ids || [];
+      if (!ids.length) break;
+
+      const page = [];
+      for (let i = 0; i < ids.length; i++) {
+        const meta = data.metadatas?.[i] || {};
+        const { namespace: ns, model, created_at, ...rest } = meta;
+        page.push(toRecord({
+          id:         ids[i],
+          text:       data.documents?.[i] || null,
+          vector:     data.embeddings?.[i] || null,
+          model:      model || null,
+          namespace:  ns || null,
+          created_at: created_at || null,
+          metadata:   rest,
+        }, 'chroma'));
+        sent++;
+        if (limit && sent >= limit) break;
+      }
+
+      await onPage(page);
+      progress(sent, limit ?? (typeof colCount === 'number' ? colCount : sent), 'chroma stream');
+      if (limit && sent >= limit) break;
+      if (ids.length < pageSize) break;
+      offset += pageSize;
+    }
+    process.stdout.write('\n');
+  },
 };

@@ -1,16 +1,26 @@
 /**
  * core/migrate.js — reusable migration engine
- * Extracted from vex.mjs for programmatic use and future streaming support
+ * Streaming-aware import/export + vec2vec adapter + re-embedding pipeline
  */
-import { getConnector } from '../connectors/index.js';
+
+import { getConnector }              from '../connectors/index.js';
 import { writeJsonl, writeMeta, readJsonl } from '../formats/vmig.js';
-import { reEmbed } from '../utils/embed.js';
-import fs from 'fs';
-import readline from 'readline';
+import { reEmbed }                   from '../utils/embed.js';
+import { adaptRecords }              from '../utils/adapt.js';
+import fs                            from 'fs';
+import readline                      from 'readline';
+
+const STREAM_THRESHOLD = 100_000; // records above this use streaming paths
+
+// ── DIM CHECK + ADAPTER + REEMBED ────────────────────────────────────────────
 
 /**
- * Check for dimension mismatch between records and target connector,
- * optionally re-embed if text is present.
+ * Resolve dimension mismatches between records and target.
+ * Priority: --adapter (vec2vec, no API) > --reembed (OpenAI/Ollama API) > skip
+ *
+ * @param {Array}  records
+ * @param {number|null} targetDims
+ * @param {object} opts   — CLI flags: adapter, 'adapter-model', reembed, 'embed-model', etc.
  */
 export async function dimCheck(records, targetDims, opts) {
   if (!targetDims) return records;
@@ -18,74 +28,136 @@ export async function dimCheck(records, targetDims, opts) {
   const mismatched = records.filter(r => r.vector && r.vector.length !== targetDims);
   if (!mismatched.length) return records;
 
-  const reembeddable = mismatched.filter(r => r.text);
-  console.warn(`[core] ⚠  ${mismatched.length} records have dim mismatch (expected ${targetDims})`);
+  console.warn(`[core] ⚠ ${mismatched.length} records have dim mismatch (expected ${targetDims})`);
 
-  if (opts.reembed && reembeddable.length) {
-    console.log(`[core] --reembed: re-embedding ${reembeddable.length} records with text`);
-    await reEmbed(reembeddable, opts);
-    // patch back
-    for (const r of reembeddable) {
-      const orig = records.find(x => x.id === r.id);
-      if (orig) { orig.vector = r.vector; orig.dims = r.dims; orig.model = r.model; }
+  // ── Option 1: vec2vec projection via vex-adapter ──────────────────────────
+  if (opts.adapter) {
+    const targetModel = opts['adapter-model'] || opts['embed-model'];
+    if (!targetModel) throw new Error('[core] --adapter requires --adapter-model <model-name>');
+    console.log(`[core] --adapter: projecting via vex-adapter → ${targetModel}`);
+    await adaptRecords(mismatched, targetModel, opts);
+    // re-filter after projection
+    const stillBad = records.filter(r => r.vector && r.vector.length !== targetDims);
+    if (stillBad.length) {
+      console.warn(`[core] ⚠ ${stillBad.length} records still mismatched after projection — will be skipped`);
     }
-  } else if (mismatched.length) {
-    const noText = mismatched.filter(r => !r.text).length;
-    if (noText) console.error(`[core] ✗  ${noText} records cannot be re-embedded (no text). Use --reembed.`);
+    return records;
   }
+
+  // ── Option 2: re-embed from text via OpenAI/Ollama ───────────────────────
+  if (opts.reembed) {
+    const reembeddable = mismatched.filter(r => r.text);
+    const noText       = mismatched.length - reembeddable.length;
+
+    if (noText) console.error(`[core] ✗ ${noText} mismatched records have no text — cannot re-embed, will be skipped`);
+
+    if (reembeddable.length) {
+      console.log(`[core] --reembed: re-embedding ${reembeddable.length} records`);
+      await reEmbed(reembeddable, opts);
+
+      // patch back into records array
+      const idx = new Map(reembeddable.map(r => [r.id, r]));
+      for (let i = 0; i < records.length; i++) {
+        const updated = idx.get(records[i].id);
+        if (updated) records[i] = updated;
+      }
+    }
+    return records;
+  }
+
+  // ── No resolution strategy — warn and let connector filter ────────────────
+  const noText = mismatched.filter(r => !r.text).length;
+  if (noText) {
+    console.error(`[core] ✗ ${noText} records cannot be resolved (no text, no --adapter). They will be skipped.`);
+  } else {
+    console.warn(`[core] tip: use --reembed to re-embed from text, or --adapter for vec2vec projection`);
+  }
+
   return records;
 }
 
+// ── STREAMING EXPORT ──────────────────────────────────────────────────────────
+
 /**
- * Stream-aware export: for large datasets, streams jsonl line by line
- * without loading all records into memory at once.
+ * Export from a connector to a .vmig.jsonl file in streaming fashion.
+ * If connector exposes extractStream(opts, onPage), uses it.
+ * Falls back to full extract() and writes progressively (memory-bound fallback).
+ *
+ * @param {object} connector
+ * @param {object} opts
+ * @param {string} outPath   — destination file path
+ * @returns {number} total records written
  */
 export async function streamExport(connector, opts, outPath) {
-  const STREAM_THRESHOLD = 100_000;
-
-  // connectors that support streaming via their own cursor (all do page-by-page already)
-  // For now, stream means: write records to file as they come in pages
-  const tmpPath = outPath + '.streaming';
+  const tmpPath  = outPath + '.tmp';
   const outStream = fs.createWriteStream(tmpPath, { encoding: 'utf8' });
-
   let total = 0;
-  let pageCallback = null;
 
-  // hook: if connector exposes extractStream, use it; else fall back to extract
-  if (typeof connector.extractStream === 'function') {
-    await connector.extractStream(opts, async (page) => {
-      for (const r of page) {
-        outStream.write(JSON.stringify(r) + '\n');
-        total++;
-      }
-    });
-  } else {
-    // standard extract — still loads all in memory, but writes progressively
-    const records = await connector.extract(opts);
-    for (const r of records) {
+  const writePage = async (page) => {
+    for (const r of page) {
       outStream.write(JSON.stringify(r) + '\n');
       total++;
     }
+  };
+
+  if (typeof connector.extractStream === 'function') {
+    // true streaming — connector pages without accumulating
+    await connector.extractStream(opts, writePage);
+  } else {
+    // fallback — loads all into memory, writes progressively
+    console.warn(`[core] connector "${connector.name}" has no extractStream — loading full dataset`);
+    const records = await connector.extract(opts);
+    await writePage(records);
   }
 
-  await new Promise((res, rej) => outStream.on('finish', res).on('error', rej));
-  outStream.end();
+  await new Promise((res, rej) => {
+    outStream.end();
+    outStream.on('finish', res);
+    outStream.on('error',  rej);
+  });
+
   fs.renameSync(tmpPath, outPath);
   console.log(`[core] streamed ${total} records → ${outPath}`);
   return total;
 }
 
+// ── STREAMING IMPORT ──────────────────────────────────────────────────────────
+
 /**
- * Stream-aware import: reads a jsonl file line by line and loads in batches
- * without pulling all records into memory.
+ * Read a .vmig.jsonl file line-by-line and load into connector in batches.
+ * Never holds more than batchSize records in memory.
+ *
+ * @param {string} filePath
+ * @param {object} connector
+ * @param {object} opts       — includes adapter/reembed flags
+ * @param {number} batchSize  — default 500
+ * @returns {{ total, upserted }}
  */
 export async function streamImport(filePath, connector, opts, batchSize = 500) {
   if (!fs.existsSync(filePath)) throw new Error(`[core] file not found: ${filePath}`);
 
   const rl = readline.createInterface({ input: fs.createReadStream(filePath) });
-  let batch = [];
-  let total = 0;
+
+  let batch    = [];
+  let total    = 0;
   let upserted = 0;
+  let skipped  = 0;
+
+  // detect target dims lazily from first connector response (best-effort)
+  let targetDims = null;
+
+  const flushBatch = async () => {
+    if (!batch.length) return;
+
+    // resolve dim mismatches per batch
+    const resolved = await dimCheck(batch, targetDims, opts);
+    await connector.load(resolved, opts);
+
+    upserted += resolved.filter(r => r.vector).length;
+    skipped  += resolved.filter(r => !r.vector).length;
+    process.stdout.write(`\r[core] imported ${upserted} | skipped ${skipped}`);
+    batch = [];
+  };
 
   for await (const line of rl) {
     const t = line.trim();
@@ -93,56 +165,51 @@ export async function streamImport(filePath, connector, opts, batchSize = 500) {
     try {
       batch.push(JSON.parse(t));
     } catch {
-      console.warn(`[core] skipping bad line at record ${total}`);
+      console.warn(`\n[core] skipping malformed JSON at record ${total}`);
       continue;
     }
     total++;
-
-    if (batch.length >= batchSize) {
-      if (opts.reembed) await reEmbed(batch, opts);
-      await connector.load(batch, opts);
-      upserted += batch.length;
-      process.stdout.write(`\r[core] imported ${upserted} records`);
-      batch = [];
-    }
+    if (batch.length >= batchSize) await flushBatch();
   }
 
-  // flush remainder
-  if (batch.length) {
-    if (opts.reembed) await reEmbed(batch, opts);
-    await connector.load(batch, opts);
-    upserted += batch.length;
-  }
+  await flushBatch(); // flush remainder
 
   process.stdout.write('\n');
-  console.log(`[core] ✓ stream import complete — ${upserted}/${total} records`);
-  return { total, upserted };
+  console.log(`[core] ✓ stream import complete — ${upserted} upserted / ${skipped} skipped / ${total} total`);
+  return { total, upserted, skipped };
 }
 
+// ── FULL MIGRATE PIPELINE ─────────────────────────────────────────────────────
+
 /**
- * Full migrate pipeline: extract → optional reembed → load
- * Streaming-aware: uses streamImport for files > STREAM_THRESHOLD lines
+ * Migrate from one connector to another.
+ * Auto-switches to streaming for jsonl sources > STREAM_THRESHOLD lines.
+ *
+ * @param {object} fromConnector
+ * @param {object} toConnector
+ * @param {object} opts
  */
 export async function migrate(fromConnector, toConnector, opts) {
-  const STREAM_THRESHOLD = 100_000;
-
-  // if migrating from file, check size first
   if (fromConnector.name === 'jsonl') {
-    const filePath = opts.from || opts.file || opts.input;
+    const filePath  = opts.from || opts.file || opts.input;
     const lineCount = await countLines(filePath);
-    console.log(`[core] ${lineCount} records in file`);
+    console.log(`[core] ${lineCount.toLocaleString()} records in file`);
 
     if (lineCount > STREAM_THRESHOLD) {
-      console.log(`[core] streaming mode (>${STREAM_THRESHOLD} records)`);
+      console.log(`[core] streaming mode activated (>${STREAM_THRESHOLD.toLocaleString()} records)`);
       return streamImport(filePath, toConnector, opts);
     }
   }
 
-  const records = await fromConnector.extract(opts);
-  if (opts.reembed) await reEmbed(records, opts);
-  await toConnector.load(records, opts);
-  return { total: records.length, upserted: records.length };
+  // standard path — load all, dim-check, load target
+  const records   = await fromConnector.extract(opts);
+  const targetDims = await resolveTargetDims(toConnector, opts);
+  const resolved  = await dimCheck(records, targetDims, opts);
+  await toConnector.load(resolved, opts);
+  return { total: records.length, upserted: resolved.filter(r => r.vector).length };
 }
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
 
 async function countLines(filePath) {
   if (!filePath || !fs.existsSync(filePath)) return 0;
@@ -150,4 +217,15 @@ async function countLines(filePath) {
   const rl = readline.createInterface({ input: fs.createReadStream(filePath) });
   for await (const _ of rl) count++;
   return count;
+}
+
+/**
+ * Best-effort: ask the connector for its target vector dimension.
+ * Each connector exposes getDims(opts) if it can pre-check (e.g. Pinecone index metadata).
+ */
+async function resolveTargetDims(connector, opts) {
+  if (typeof connector.getDims === 'function') {
+    try { return await connector.getDims(opts); } catch { /* non-fatal */ }
+  }
+  return null;
 }

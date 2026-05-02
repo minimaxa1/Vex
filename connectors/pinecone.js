@@ -138,4 +138,72 @@ export const pineconeConnector = {
 
     summary({ connector:'pinecone', total:records.length, upserted, skipped, durationMs:Date.now()-t0 });
   },
+async extractStream(opts, onPage) {
+    const apiKey = opts['api-key'] || process.env.PINECONE_API_KEY;
+    const index  = opts['index']   || process.env.PINECONE_INDEX;
+    const host   = opts['host']    || process.env.PINECONE_HOST;
+    const ns     = opts['namespace'] || '';
+    const limit  = opts['limit'] ? parseInt(opts['limit']) : null;
+
+    if (!apiKey) throw new Error('[pinecone] --api-key required');
+    if (!index)  throw new Error('[pinecone] --index required');
+    if (!host)   throw new Error('[pinecone] --host required');
+
+    const h = { 'Api-Key': apiKey, 'Content-Type': 'application/json' };
+
+    const metaRes = await fetch(`https://api.pinecone.io/indexes/${index}`, { headers: h });
+    if (!metaRes.ok) throw new Error(`[pinecone] index metadata failed: ${await metaRes.text()}`);
+    const { dimension } = await metaRes.json();
+    console.log(`[pinecone] stream export — "${index}" dim=${dimension}`);
+
+    // list IDs
+    const ids = [];
+    let pToken;
+    while (true) {
+      const url = new URL(`${host}/vectors/list`);
+      if (ns)     url.searchParams.set('namespace',       ns);
+      if (pToken) url.searchParams.set('paginationToken', pToken);
+      url.searchParams.set('limit', '100');
+
+      const res  = await fetch(url.toString(), { headers: h });
+      if (!res.ok) throw new Error(`[pinecone] list failed: ${await res.text()}`);
+      const data = await res.json();
+      const page = (data.vectors || []).map(v => v.id);
+      ids.push(...page);
+      if (limit && ids.length >= limit) { ids.splice(limit); break; }
+      pToken = data.pagination?.next;
+      if (!pToken) break;
+    }
+    console.log(`[pinecone] ${ids.length} IDs — fetching in pages...`);
+
+    let sent = 0;
+    for (const batch of chunk(ids, 100)) {
+      const url = new URL(`${host}/vectors/fetch`);
+      batch.forEach(id => url.searchParams.append('ids', id));
+      if (ns) url.searchParams.set('namespace', ns);
+
+      const res  = await fetch(url.toString(), { headers: h });
+      if (!res.ok) throw new Error(`[pinecone] fetch failed: ${await res.text()}`);
+      const data = await res.json();
+
+      const page = [];
+      for (const [id, vec] of Object.entries(data.vectors || {})) {
+        const { text, namespace: vns, model, created_at, ...rest } = vec.metadata || {};
+        page.push(toRecord({
+          id,
+          text:       text || null,
+          vector:     vec.values || null,
+          dims:       vec.values?.length ?? dimension,
+          model:      model || null,
+          namespace:  vns || ns || null,
+          created_at: created_at || null,
+          metadata:   Object.fromEntries(Object.entries(rest).filter(([,v]) => typeof v !== 'object' || v === null)),
+        }, 'pinecone'));
+      }
+      await onPage(page);
+      sent += page.length;
+      progress(sent, ids.length, 'pinecone stream');
+    }
+    process.stdout.write('\n');
+  },
 };

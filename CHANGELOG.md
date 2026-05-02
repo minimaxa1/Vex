@@ -1,4 +1,31 @@
-# CHANGELOG.md
+## [0.3.0] - 2026-05-02
+
+### Added
+- **Weaviate connector** — full export + import, GraphQL cursor pagination, auto-create class, batch upsert, extractStream() for large datasets
+- **pgvector connector** — full export + import, schema introspection, cursor-paginated export, ivfflat index auto-create, extractStream() for zero-memory large-table export
+- **Re-embedding pipeline** — `--reembed` flag re-embeds from text field via OpenAI or Ollama; `--embed-model` to override
+- **vec2vec adapter** — `--adapter` invokes @vektormemory/vex-adapter for projection without API call; `vex adapters` lists available pairs
+- **Streaming for >100k vectors** — streamExport() via WriteStream, streamImport() in 500-record batches; migrate() auto-switches at 100k threshold
+- **dimCheck() in core** — resolves dim mismatches: --adapter > --reembed > skip, per-batch during streaming import
+
+### Connectors v0.3.0
+
+| Connector | Export | Import | Notes |
+|-----------|--------|--------|-------|
+| vektor    | yes    | yes    | Round-trip complete |
+| jsonl     | yes    | yes    | Stable |
+| pinecone  | yes    | yes    | 4,900 vectors tested |
+| qdrant    | yes    | yes    | Scroll export; auto-create on import |
+| chroma    | yes    | yes    | Auto-create collection |
+| weaviate  | yes    | yes    | v0.3 new; GraphQL cursor; extractStream |
+| pgvector  | yes    | yes    | v0.3 new; schema introspection; extractStream |
+
+### Fixed
+- qdrant.js: spaced optional chain and nullish coalescing causing SyntaxError on Node 24
+- qdrant.js: ambiguous ternary/optional-chain on colDim rewritten as clean nullish chain
+- pgvector.js: extractStream() was outside connector object literal — fixed
+
+---
 
 ## [0.2.0] - 2026-05-02
 

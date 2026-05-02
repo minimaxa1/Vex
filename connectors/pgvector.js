@@ -193,4 +193,80 @@ export const pgvectorConnector = {
       await pool.end();
     }
   },
+ async extractStream(opts, onPage) {
+    const connStr   = opts['url']   || process.env.PGVECTOR_URL || process.env.DATABASE_URL;
+    const table     = opts['table'] || process.env.PGVECTOR_TABLE || 'vex_vectors';
+    const namespace = opts['namespace'] || null;
+    const limit     = opts['limit'] ? parseInt(opts['limit']) : null;
+
+    if (!connStr) throw new Error('[pgvector] --url required');
+
+    const { Pool } = await getPg();
+    const pool = new Pool({ connectionString: connStr });
+
+    try {
+      const cols    = await pool.query(`SELECT column_name FROM information_schema.columns WHERE table_name=$1`, [table]);
+      const colNames = cols.rows.map(r => r.column_name);
+      const has = f => colNames.includes(f);
+
+      let countQ  = `SELECT COUNT(*) FROM "${table}"`;
+      const countP = [];
+      if (namespace && has('namespace')) { countQ += ` WHERE namespace=$1`; countP.push(namespace); }
+      const total = parseInt((await pool.query(countQ, countP)).rows[0].count);
+      console.log(`[pgvector] stream export — "${table}" (${total} rows)`);
+
+      const pageSize = 500;
+      let offset = 0;
+      let sent   = 0;
+
+      while (true) {
+        let q = `SELECT id, vector::text`;
+        if (has('text'))       q += ', text';
+        if (has('model'))      q += ', model';
+        if (has('namespace'))  q += ', namespace';
+        if (has('created_at')) q += ', created_at';
+        if (has('metadata'))   q += ', metadata';
+        q += ` FROM "${table}"`;
+
+        const params = [];
+        if (namespace && has('namespace')) { q += ` WHERE namespace=$${params.length+1}`; params.push(namespace); }
+        q += ` ORDER BY id LIMIT ${Math.min(pageSize, limit ? limit - sent : pageSize)} OFFSET ${offset}`;
+
+        const res = await pool.query(q, params);
+        if (!res.rows.length) break;
+
+        const page = [];
+        for (const row of res.rows) {
+          let vector = null;
+          if (row.vector) {
+            try { vector = JSON.parse(row.vector); } catch {}
+            if (!Array.isArray(vector)) vector = row.vector.replace(/[\[\]]/g, '').split(',').map(Number);
+          }
+          let meta = null;
+          if (row.metadata) try { meta = typeof row.metadata === 'object' ? row.metadata : JSON.parse(row.metadata); } catch {}
+
+          page.push(toRecord({
+            id:         String(row.id),
+            text:       row.text || null,
+            vector,
+            model:      row.model || null,
+            namespace:  row.namespace || null,
+            created_at: row.created_at ? new Date(row.created_at).toISOString() : null,
+            metadata:   meta,
+          }, 'pgvector'));
+          sent++;
+          if (limit && sent >= limit) break;
+        }
+
+        await onPage(page);
+        progress(sent, limit ?? total, 'pgvector stream');
+        if (limit && sent >= limit) break;
+        offset += pageSize;
+        if (res.rows.length < pageSize) break;
+      }
+      process.stdout.write('\n');
+    } finally {
+      await pool.end();
+    }
+  },
 };

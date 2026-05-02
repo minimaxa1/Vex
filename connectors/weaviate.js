@@ -151,4 +151,63 @@ export const weaviateConnector = {
 
     summary({ connector:'weaviate', total:records.length, upserted, skipped, durationMs:Date.now()-t0 });
   },
+async extractStream(opts, onPage) {
+    const url       = (opts['url'] || process.env.WEAVIATE_URL || 'http://localhost:8080').replace(/\/$/, '');
+    const className = opts['collection'] || opts['class'] || process.env.WEAVIATE_CLASS;
+    const apiKey    = opts['api-key'] || process.env.WEAVIATE_API_KEY || '';
+    const namespace = opts['namespace'] || null;
+    const limit     = opts['limit'] ? parseInt(opts['limit']) : null;
+
+    if (!className) throw new Error('[weaviate] --collection required');
+
+    const headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+
+    console.log(`[weaviate] stream export — class "${className}"`);
+
+    let cursor = null;
+    let sent   = 0;
+
+    while (true) {
+      const pageSize = Math.min(100, limit ? limit - sent : 100);
+      let gql = `{Get{${className}(limit:${pageSize}`;
+      if (cursor) gql += `,after:"${cursor}"`;
+      gql += `){_additional{id vector}text model namespace created_at metadata}}}`;
+
+      const res  = await fetch(`${url}/v1/graphql`,
+        { method: 'POST', headers, body: JSON.stringify({ query: gql }) });
+      if (!res.ok) throw new Error(`[weaviate] graphql failed: ${await res.text()}`);
+      const data = await res.json();
+      if (data.errors) throw new Error(`[weaviate] ${JSON.stringify(data.errors)}`);
+
+      const objects = data.data?.Get?.[className] ?? [];
+      if (!objects.length) break;
+
+      const page = [];
+      for (const obj of objects) {
+        const { _additional, text, model, namespace: ns, created_at, ...rest } = obj;
+        if (namespace && ns !== namespace) continue;
+        let meta = {};
+        try { meta = typeof rest.metadata === 'string' ? JSON.parse(rest.metadata) : (rest.metadata ?? {}); } catch {}
+        page.push(toRecord({
+          id:         _additional.id,
+          text:       text || null,
+          vector:     _additional.vector || null,
+          model:      model || null,
+          namespace:  ns || null,
+          created_at: created_at || null,
+          metadata:   Object.keys(meta).length ? meta : null,
+        }, 'weaviate'));
+        sent++;
+        if (limit && sent >= limit) break;
+      }
+
+      await onPage(page);
+      progress(sent, limit ?? sent + (objects.length === pageSize ? 1 : 0), 'weaviate stream');
+      if (limit && sent >= limit) break;
+      cursor = objects[objects.length - 1]?._additional?.id;
+      if (objects.length < pageSize) break;
+    }
+    process.stdout.write('\n');
+  },
 };

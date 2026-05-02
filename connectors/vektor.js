@@ -108,4 +108,14 @@ export const vektorConnector = {
     summary({ connector: 'vektor', total: records.length, upserted, skipped, durationMs: Date.now() - t0 });
     console.log(`[vektor] written to ${dbPath}`);
   },
+async extractStream(opts, onPage) {
+    // vektor reads all from SQLite in one query — delegate to extract then page
+    // True streaming would require a cursor on the DB — not worth the complexity
+    // since SQLite reads are local and fast. Page the result into onPage calls.
+    const records = await this.extract(opts);
+    const PAGE    = 1000;
+    for (let i = 0; i < records.length; i += PAGE) {
+      await onPage(records.slice(i, i + PAGE));
+    }
+  },
 };
