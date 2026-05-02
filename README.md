@@ -176,11 +176,12 @@ After import, the sidecar is updated with `imported_to` and `imported_at` fields
 - Progress bar + summary block
 
 **v0.2.0 — shipped**
-- Pinecone export
-- Qdrant export
-- ChromaDB connector (import + export)
-- `--namespace` filter on all connectors
-- `--limit` flag for partial exports
+- Completes bidirectional support for all three major connectors and adds filtering flags across the board.
+- Pinecone export — paginated ID listing + batched vector fetch, namespace filter, --limit support
+- Qdrant export — scroll API with cursor pagination, namespace filter, --limit support
+- ChromaDB connector — full import + export, auto-create collection, tenant/database options
+- namespace flag on all export connectors
+- limit flag on all export connectors
 
 **v0.3**
 - Weaviate, pgvector connectors
