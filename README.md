@@ -1,12 +1,12 @@
-# Vex — Vector Exchange - Vex Adaptor (embeddings)
+# Vex — Vector Exchange
 
 > Cross-standard vector DB migration tool. Export, import, and migrate agent memory between vector stores using the open `.vmig.jsonl` interchange format.
 
 ```bash
 npx @vektormemory/vex export --from vektor --db slipstream-memory.db --output memories.vmig.jsonl
 npx @vektormemory/vex import --from memories.vmig.jsonl --to pinecone --api-key $KEY --index my-index --host $HOST
-npx vex import --from memories.vmig.jsonl --to qdrant --collection memories
-npx vex migrate --from vektor --to qdrant --db memory.db --url http://localhost:6333 --collection memories
+npx @vektormemory/vex import --from memories.vmig.jsonl --to qdrant --collection memories
+npx @vektormemory/vex migrate --from vektor --to qdrant --db memory.db --url http://localhost:6333 --collection memories
 ```
 
 ## Why
@@ -17,15 +17,15 @@ Every vector DB has a different API, a different format, and zero interop. Movin
 
 ## Connectors
 
-| Connector | Export | Import | Status |
-|-----------|--------|--------|--------|
-| `vektor`   | ✅ | ✅ v0.1 | Stable |
-| `jsonl`    | ✅ | ✅      | Stable |
-| `pinecone` | 🔜 Phase 2 | ✅ | Tested — 4,900 vectors |
-| `qdrant`   | 🔜 Phase 2 | ✅ | Tested — 3,917 vectors, auto-create |
-| `chroma`   | 🔜 | 🔜 | Phase 2 |
-| `weaviate` | 🔜 | 🔜 | Phase 2 |
-| `pgvector` | 🔜 | 🔜 | Phase 2 |
+| Connector  | Export | Import | Status |
+|------------|--------|--------|--------|
+| `vektor`   | ✅ | ✅ | Stable |
+| `jsonl`    | ✅ | ✅ | Stable |
+| `pinecone` | ✅ | ✅ | Stable — tested 4,900 vectors |
+| `qdrant`   | ✅ | ✅ | Stable — tested 3,917 vectors, auto-create |
+| `chroma`   | ✅ | ✅ | v0.2 |
+| `weaviate` | 🔜 | 🔜 | Phase 3 |
+| `pgvector` | 🔜 | 🔜 | Phase 3 |
 
 ## Install
 
@@ -36,17 +36,14 @@ npm install -g @vektormemory/vex
 # Or run without installing
 npx @vektormemory/vex --help
 
-#Vex
+# Vex CLI
 npm i @vektormemory/vex
 
-#Vex Adaptor (Embeddings)
+# Vex Adapter (vec2vec embeddings — optional)
 npm i @vektormemory/vex-adapter
 ```
 
-**Requirements:** Node.js >= 18 (native fetch required). No extra dependencies for Pinecone or Qdrant — connectors use the built-in fetch API.
-```
-
-**Requirements:** Node.js >= 18 (native fetch required). No extra dependencies for Pinecone or Qdrant — connectors use the built-in fetch API.
+**Requirements:** Node.js >= 18 (native fetch required). No extra dependencies for Pinecone, Qdrant, or Chroma — connectors use the built-in fetch API.
 
 ## Commands
 
@@ -58,6 +55,15 @@ vex export --from vektor --db ./slipstream-memory.db --output memories.vmig.json
 
 # Export a specific namespace only
 vex export --from vektor --db ./memory.db --namespace trading --output trading.vmig.jsonl
+
+# Export from Qdrant
+vex export --from qdrant --collection memories --output memories.vmig.jsonl
+
+# Export from Pinecone
+vex export --from pinecone --api-key $PINECONE_API_KEY --index my-index --host $HOST --output memories.vmig.jsonl
+
+# Export from ChromaDB
+vex export --from chroma --collection memories --output memories.vmig.jsonl
 ```
 
 ### Import
@@ -77,6 +83,9 @@ vex import --from memories.vmig.jsonl --to qdrant \
 
 # → Qdrant local (no auth)
 vex import --from memories.vmig.jsonl --to qdrant --collection memories
+
+# → ChromaDB
+vex import --from memories.vmig.jsonl --to chroma --collection memories
 ```
 
 ### Migrate (direct — no intermediate file)
@@ -116,7 +125,7 @@ One JSON object per line. UTF-8. Portable across any vector store.
 **Key decisions:**
 - Metadata is **flat** — Pinecone compatible out of the box
 - `namespace` is top-level — structural routing, not descriptive metadata
-- `text` field always preserved — enables cross-model re-embedding in v0.2
+- `text` field always preserved — enables cross-model re-embedding in v0.3
 - `score` field included — useful for search-result exports
 - Sidecar `.vmig.meta.json` for file-level metadata (record count, SHA-256 checksum, source store)
 
@@ -127,13 +136,9 @@ One JSON object per line. UTF-8. Portable across any vector store.
 | Same model, same dims | Vectors copied directly — no re-embedding |
 | Dim mismatch with target | Records skipped with warning + count in summary |
 | `null` vector | Record skipped with warning |
-| Different model *(v0.2)* | Re-embed from `text` field via Drift-Adapter |
-
-Connectors auto-detect target dimension (Pinecone: queries index metadata API, Qdrant: queries collection config) and filter records accordingly. Batch retry logic (3x with backoff) built in.
+| Different model *(v0.3)* | Re-embed from `text` field via vex-adapter |
 
 ## Sidecar Metadata
-
-Each export and import produces a `.vmig.meta.json` alongside the data file:
 
 ```json
 {
@@ -148,19 +153,13 @@ Each export and import produces a `.vmig.meta.json` alongside the data file:
 After import, the sidecar is updated with `imported_to` and `imported_at` fields for full auditability.
 
 ## Progress & Summary
-
-Every import shows a live progress bar and a summary block:
-
-```
 [████████████████████] 100% pinecone (4900/4900)
-
 ┌─ pinecone summary ─────────────────────────
 │  total records   : 4900
 │  upserted        : 4900
 │  skipped         : 0
 │  duration        : 87.3s
 └────────────────────────────────────────────
-```
 
 ## Roadmap
 
@@ -176,7 +175,7 @@ Every import shows a live progress bar and a summary block:
 - Batch retry with backoff (3x)
 - Progress bar + summary block
 
-**v0.2 — next**
+**v0.2.0 — shipped**
 - Pinecone export
 - Qdrant export
 - ChromaDB connector (import + export)
@@ -185,11 +184,11 @@ Every import shows a live progress bar and a summary block:
 
 **v0.3**
 - Weaviate, pgvector connectors
-- Re-embedding pipeline (different model → re-embed from `text` field)
+- Re-embedding pipeline (different model → re-embed from `text` field via vex-adapter)
 - Streaming for large datasets (>100k vectors)
 
 **v0.4 (premium)**
-- Pre-trained Drift-Adapter weights (vec2vec translation — no re-embedding required)
+- Pre-trained vex-adapter weights (vec2vec translation — no re-embedding required)
 - Multimodal support
 
 ## Contributing
