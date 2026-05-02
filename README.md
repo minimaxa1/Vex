@@ -35,6 +35,12 @@ npm install -g @vektormemory/vex
 
 # Or run without installing
 npx @vektormemory/vex --help
+
+#Vex
+npm i @vektormemory/vex
+
+#Vex Adaptor
+npm i @vektormemory/vex-adapter
 ```
 
 **Requirements:** Node.js >= 18 (native fetch required). No extra dependencies for Pinecone or Qdrant — connectors use the built-in fetch API.
