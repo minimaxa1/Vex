@@ -3,8 +3,8 @@
 > Cross-standard vector DB migration tool. Export, import, and migrate agent memory between vector stores using the open `.vmig.jsonl` interchange format.
 
 ```bash
-npx vex export --from vektor --db slipstream-memory.db --output memories.vmig.jsonl
-npx vex import --from memories.vmig.jsonl --to pinecone --api-key $KEY --index my-index --host $HOST
+npx @vektormemory/vex export --from vektor --db slipstream-memory.db --output memories.vmig.jsonl
+npx @vektormemory/vex import --from memories.vmig.jsonl --to pinecone --api-key $KEY --index my-index --host $HOST
 npx vex import --from memories.vmig.jsonl --to qdrant --collection memories
 npx vex migrate --from vektor --to qdrant --db memory.db --url http://localhost:6333 --collection memories
 ```
