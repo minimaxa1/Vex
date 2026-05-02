@@ -39,7 +39,7 @@ npx @vektormemory/vex --help
 #Vex
 npm i @vektormemory/vex
 
-#Vex Adaptor
+#Vex Adaptor (Embeddings)
 npm i @vektormemory/vex-adapter
 ```
 
