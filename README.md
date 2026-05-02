@@ -161,3 +161,4 @@ License
 Apache 2.0 — free to use, fork, and build on.
 
 Built by VEKTOR — persistent semantic memory for AI agents.
+
