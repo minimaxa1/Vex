@@ -1,32 +1,42 @@
 # CHANGELOG.md
 
+## [0.2.0] - 2026-05-02
+
+### Added
+- **Qdrant export** — full `extract()` via scroll API, paginated, namespace filter, limit flag
+- **Pinecone export** — two-step: list IDs (`/vectors/list`) + batch fetch (`/vectors/fetch`), paginated
+- **VEKTOR import** — `load()` writes records back into SQLite as Float32Array blobs, batched transactions (500/tx)
+- **ChromaDB connector** — full `extract()` + `load()`, collection auto-create, namespace filter
+- **`--namespace` flag** — filter export by namespace on vektor, qdrant, pinecone, chroma
+- **`--limit` flag** — cap export at N records on all connectors
+- CLI redesigned — multi-depth blue palette (navy → cobalt → steel → sky → ice → powder), grey/white type scale
+- Banner uses three-colour split: cobalt / steel / sky blue on ASCII art
+- All box chrome in steel blue, labels in silver, values in ice, metadata in grey
+- v0.2.0 shown in banner
+
+### Connectors — Phase 2 status
+
+| Connector | Export | Import | Notes |
+|-----------|--------|--------|-------|
+| vektor    | ✅     | ✅     | Round-trip complete |
+| jsonl     | ✅     | ✅     | Stable |
+| pinecone  | ✅     | ✅     | List + fetch export; 4,900 vectors tested |
+| qdrant    | ✅     | ✅     | Scroll export; auto-create on import |
+| chroma    | ✅     | ✅     | v0.2 new; auto-create collection |
+
+---
+
 ## [0.1.0] - 2026-05-02
 
 ### Added
-- `vex import` — load `.vmig.jsonl` into any connector
-- Pinecone import connector — dimension auto-detect, batch upsert, 3x retry
-- Qdrant import connector — collection auto-create, dimension check, batch upsert, 3x retry
-- `utils/checksum.js` — SHA-256 checksumming for records and files
-- `utils/batch.js` — retry logic with configurable retries + delay
-- `utils/progress.js` — `summary()` block with total/upserted/skipped/duration
-- `formats/vmig.js` — `writeMeta()` now includes `sha256:` checksum field
-- `vex migrate` now supported for all connector combinations
-- `--auto-create` flag on Qdrant connector (default true)
-- ENV fallback for all connector credentials
-
-### Changed
-- `vex.mjs` bumped to v0.1.0
-- `vex import` writes updated `.vmig.meta.json` sidecar after import (records imported_to, imported_at)
-- Progress bar uses `utils/progress.js` across all connectors (consistent)
-
-### Connectors
-
-| Connector | Export | Import | Status    |
-|-----------|--------|--------|-----------|
-| vektor    | ✅     | Phase 2| Stable    |
-| jsonl     | ✅     | ✅     | Stable    |
-| pinecone  | Phase 2| ✅     | v0.1 new  |
-| qdrant    | Phase 2| ✅     | v0.1 new  |
+- `vex import` command
+- Pinecone import (tested — 4,900 vectors)
+- Qdrant import (tested — 3,917 vectors, auto-create)
+- `utils/checksum.js` — SHA-256 on record arrays
+- `utils/batch.js` — retry with backoff (3x)
+- `utils/progress.js` — `summary()` block
+- `formats/vmig.js` — checksum in sidecar meta
+- CLI v0.1: banner, colors, inspect, validate, interactive menu
 
 ---
 

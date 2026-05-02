@@ -1,4 +1,4 @@
-# Vex — Vector Exchange
+# vex — Vector Exchange
 
 > Cross-standard vector DB migration tool. Export, import, and migrate agent memory between vector stores using the open `.vmig.jsonl` interchange format.
 
@@ -199,4 +199,4 @@ Apache 2.0 — free to use, fork, and build on.
 
 ---
 
-Built by [VEKTOR MEMORY](https://vektormemory.com) — persistent semantic memory for AI agents.
+Built by [VEKTOR](https://vektormemory.com) — persistent semantic memory for AI agents.
