@@ -1,12 +1,21 @@
 {
-  "name": "vex",
-  "version": "0.0.1",
+  "name": "@vektormemory/vex",
+  "version": "0.2.0",
   "description": "Cross-standard vector DB migration tool — .vmig.jsonl interchange format for agent memory.",
   "type": "module",
   "bin": {
     "vex": "./vex.mjs"
   },
   "main": "./vex.mjs",
+  "files": [
+    "vex.mjs",
+    "formats/",
+    "connectors/",
+    "utils/",
+    "core/",
+    "README.md",
+    "CHANGELOG.md"
+  ],
   "license": "Apache-2.0",
   "keywords": [
     "vector",
