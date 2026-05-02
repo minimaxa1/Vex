@@ -24,8 +24,8 @@ Every vector DB has a different API, a different format, and zero interop. Movin
 | `pinecone` | ✅ | ✅ | Stable — tested 4,900 vectors |
 | `qdrant`   | ✅ | ✅ | Stable — tested 3,917 vectors, auto-create |
 | `chroma`   | ✅ | ✅ | v0.2 |
-| `weaviate` | 🔜 | 🔜 | Phase 3 |
-| `pgvector` | 🔜 | 🔜 | Phase 3 |
+| `weaviate` | ✅ | ✅ | v0.3 |
+| `pgvector` | ✅ | ✅ | v0.3 |
 
 ## Install
 
